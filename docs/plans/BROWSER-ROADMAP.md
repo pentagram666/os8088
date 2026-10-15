@@ -27,7 +27,7 @@ review outcomes and engineering lessons forward after the PR is merged.
 | 1.3 | HTML text formatting: emphasis, headings, lists, quotes, preformatted text and paragraph spacing | Integrated into PR #253; leading-space preservation is fixed and regression-tested on this branch |
 | 1.4 | Table layout, alignment, additional form controls and simple POST | Integrated into PR #253; maintainer fixes and validation are recorded below |
 | 1.5 | Navigation and usability: history, bookmarks, Find, View Source and keyboard shortcuts | Next independent milestone; history and basic keyboard navigation already exist and should be extended rather than duplicated |
-| 1.6 | Memory-aware page storage plus the standalone Download Manager and chunked transfers | Establish the conventional-memory path first; EMS/XMS remain optional backends, never requirements |
+| 1.6 | Memory-aware page storage, VRAM/render-path audit, and the standalone Download Manager with chunked transfers | Establish the conventional-memory path first; evaluate bounded image-to-display staging; EMS/XMS remain optional backends |
 | 1.7 | Image handling, initially static GIF/JPEG, reusing PiXEL decoders where practical | After memory design; decode on demand with small reusable buffers |
 | 1.8 | Compatibility and integration against early-Web pages; refine progressive rendering and interactions | Follow image and memory work |
 | 1.9 | Full audit: code reuse, allocations, binary/RAM footprint and 8088 execution cost | Broad optimization after features stabilize |
@@ -102,11 +102,26 @@ demonstrates bounded ring reads, optional XMS/EMS read-ahead and a streaming
 file path. Browser work should borrow these patterns, not the apps' whole
 allocation schemes.
 
-PR [#258](https://github.com/jggonz/os8088/pull/258) is documentation-only:
-it teaches fast fullscreen games to draw directly into VRAM pages, track
-damage per page and avoid copying a complete RAM framebuffer. Those are useful
-rendering-efficiency lessons, but VRAM pages do not store HTML/source or
-replace the Browser's document/line-table claims.
+PR [#258](https://github.com/jggonz/os8088/pull/258) is documentation-only,
+but its VRAM work is relevant to 1.6's memory/performance investigation. It
+shows when direct rendering into video pages avoids a full RAM framebuffer and
+how dirty-region/page tracking reduces redraw. That is a useful design lead
+for keeping decoded graphics out of long-lived conventional-memory buffers.
+It is not itself a general-purpose memory backend: VRAM cannot replace the
+Browser's HTML/source, document or line-table storage.
+
+The key constraint is the windowed API. `OSAPI_GFX_BLIT4` accepts a packed
+4bpp source in the app's RAM and the kernel writes it to the live framebuffer;
+windowed apps do not receive a framebuffer pointer. Direct VRAM access and
+page selection belong to an exclusive `OSAPI_FSX_RUN` bracket, which suspends
+the desktop and is not a rendering mode for an ordinary Browser window. The
+1.6 audit should therefore test a bounded staging path: decode an image row or
+tile into a small RAM buffer and blit it through the normal graphics API,
+leaving the displayed pixels in VRAM instead of retaining a full decoded
+bitmap. This could lower peak and retained RAM, while increasing decode work
+when the window is exposed, scrolled or repainted. Measure that tradeoff and
+verify redraw behavior before choosing it; VRAM contents alone are not a
+durable per-window image cache.
 
 **Recommended order:** keep the independent navigation features in 1.5
 (bookmarks, Find, View Source, shortcuts). Design the Browser's bounded content
