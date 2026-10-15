@@ -26,8 +26,8 @@ review outcomes and engineering lessons forward after the PR is merged.
 | 1.2b | Quality of life: relative links, redirects, framesets, forms and navigation fixes | Integrated into PR #253 |
 | 1.3 | HTML text formatting: emphasis, headings, lists, quotes, preformatted text and paragraph spacing | Integrated into PR #253; leading-space preservation is fixed and regression-tested on this branch |
 | 1.4 | Table layout, alignment, additional form controls and simple POST | Integrated into PR #253; maintainer fixes and validation are recorded below |
-| 1.5 | Navigation and usability: history, bookmarks, Find, View Source, keyboard navigation and better download handling | Next milestone; include safe text/binary downloads, audit existing behavior first, and keep each feature bounded |
-| 1.6 | Memory-aware browsing: review the incremental 20 KB ceiling and investigate optional EMS/XMS-backed page data | After 1.5; additional memory must stay optional |
+| 1.5 | Navigation and usability: history, bookmarks, Find, View Source and keyboard shortcuts | Next independent milestone; history and basic keyboard navigation already exist and should be extended rather than duplicated |
+| 1.6 | Memory-aware page storage plus the standalone Download Manager and chunked transfers | Establish the conventional-memory path first; EMS/XMS remain optional backends, never requirements |
 | 1.7 | Image handling, initially static GIF/JPEG, reusing PiXEL decoders where practical | After memory design; decode on demand with small reusable buffers |
 | 1.8 | Compatibility and integration against early-Web pages; refine progressive rendering and interactions | Follow image and memory work |
 | 1.9 | Full audit: code reuse, allocations, binary/RAM footprint and 8088 execution cost | Broad optimization after features stabilize |
@@ -51,11 +51,12 @@ validation remains a separate check.
 The PR's roadmap comment is the source for the milestone scope above. The
 maintainer replied that binary/text downloads and small, optionally loaded GIFs
 were also desired, and suggested considering the 360 KB package budget when
-deciding what ships where. Keep 1.5 focused on navigation/downloads; retain
-memory work before inline images, and consider a network-disk build if an
-optional feature materially grows the app. The maintainer said they expected to
-merge PR #253 after review; as checked on 2026-10-15 it remains open and awaits
-the requested code-owner approval.
+deciding what ships where. For sequencing, keep 1.5 focused on navigation and
+defer the standalone download manager to 1.6, where its streaming and storage
+design can be settled together; retain memory work before inline images, and
+consider a network-disk build if an optional feature materially grows the app.
+The maintainer said they expected to merge PR #253 after review; as checked on
+2026-10-15 it remains open and awaits the requested code-owner approval.
 
 ### 1.5 starting-point audit
 
@@ -79,6 +80,51 @@ rules, file-dialog ownership, cancellation, disk-full failures, and low-memory
 systems. Do not enlarge the fixed claim as a shortcut. Keep large-file and
 EMS/XMS work in 1.6 unless the streaming path can be proven safe without a new
 fixed allocation.
+
+### Memory and download sequencing review (PRs #252 and #258)
+
+PR [#252](https://github.com/jggonz/os8088/pull/252) merged EMS.DRV and
+Video Player EMS/XMS buffering. EMS is an optional driver API (`DRVC_EMS`),
+with 16 KB pages mapped into a held frame; it is storage, not a conventional
+far pointer that remains valid independently of mapping. XMS is available on
+286+; EMS can serve an 8088 when suitable hardware/driver is present. The
+Video Player's ring and bank are workload-specific examples, not a generic
+Browser page allocator. Its review also caught an important lifetime issue:
+re-attaching EMS must not invalidate handles/pages still cached by an app.
+
+PiXEL's reusable lessons are bounded streaming and lifetime-aware claims:
+the UI task pumps file input into a small DMA-safe ring, a worker decodes rows,
+and output/master/work claims are acquired only for the current operation and
+released or made movable when possible. Its XMS use for undo is optional and
+falls back to conventional memory; it does not provide a general page-store
+abstraction that the Browser can simply include. The Video Player separately
+demonstrates bounded ring reads, optional XMS/EMS read-ahead and a streaming
+file path. Browser work should borrow these patterns, not the apps' whole
+allocation schemes.
+
+PR [#258](https://github.com/jggonz/os8088/pull/258) is documentation-only:
+it teaches fast fullscreen games to draw directly into VRAM pages, track
+damage per page and avoid copying a complete RAM framebuffer. Those are useful
+rendering-efficiency lessons, but VRAM pages do not store HTML/source or
+replace the Browser's document/line-table claims.
+
+**Recommended order:** keep the independent navigation features in 1.5
+(bookmarks, Find, View Source, shortcuts). Design the Browser's bounded content
+store in 1.6 with a conventional-memory backend first and optional EMS/XMS
+backends only where their APIs and machine tier permit. Put the standalone
+Download Manager and its transfer lifecycle in that same storage milestone:
+it should receive and write fixed-size chunks to disk, with progress/cancel,
+and must not stage the entire download in RAM or EMS. Page storage and file
+download are different sinks; they should share the bounded receive/pump
+discipline, not force binary downloads to consume a full page allocation.
+This preserves the 8088 path and avoids building a temporary 20 KB-only
+downloader that must be replaced later.
+
+The current `browser-1.5-roadmap` branch was based on PR #253 before #252/#258
+were integrated. Refresh its base after PR #253 merges and verify the actual
+upstream merge point before coding the storage/download work. At review time,
+the local `upstream/main` ref still reported `3987ad05`, while GitHub showed
+#252 and #258 merged; do not treat that stale tracking ref as the new baseline.
 
 The maintainer added five Browser fix commits after the original 1.4 commit:
 
