@@ -57,6 +57,29 @@ optional feature materially grows the app. The maintainer said they expected to
 merge PR #253 after review; as checked on 2026-10-15 it remains open and awaits
 the requested code-owner approval.
 
+### 1.5 starting-point audit
+
+Some roadmap labels already have partial implementations and should not be
+re-created:
+
+| Area | Already present | 1.5 gap |
+|---|---|---|
+| History | Eight URL-only entries, Back/Forward/Reload, and a History menu | Consider scroll restoration only if its memory and interaction cost is justified; URL history itself is not new work |
+| Keyboard | Tab through links/form controls; arrows, Page Up/Down, Home/End scroll; Enter submits a focused form | No documented command-key map for Find, Save, Reload, View Source or bookmarks; verify the OS key encoding before adding shortcuts |
+| Save/download | File > Save As writes the retained server response bytes | It only works after a page load and the response is bounded by the existing page source claim; there is no attachment/binary response path or download filename handling |
+| Find | None | Search rendered document text without requiring a second full-page copy; define wrap and not-found behavior |
+| View Source | Raw response bytes remain in the source claim until navigation | No source display mode; preserve byte lengths and prevent NUL/binary data from being treated as strings |
+| Bookmarks | No persistent bookmark list | Reuse `apps/os88data.inc` / SYSTEM\\APPDATA conventions; bound count and storage, handle missing/read-only media, and avoid making the disk mandatory |
+
+The download investigation should first decide whether 1.5 supports bounded
+binary downloads within the existing 20 KB page claim or uses the existing
+streaming file-write API to avoid that ceiling. A worker can receive only into
+its existing source buffer today; adding disk writes must respect worker API
+rules, file-dialog ownership, cancellation, disk-full failures, and low-memory
+systems. Do not enlarge the fixed claim as a shortcut. Keep large-file and
+EMS/XMS work in 1.6 unless the streaming path can be proven safe without a new
+fixed allocation.
+
 The maintainer added five Browser fix commits after the original 1.4 commit:
 
 - `2271e601`: count table columns correctly; preserve alignment and link
@@ -124,4 +147,7 @@ Host-side validation for these fixes: `os88index.py --check`, `checkdocs.py`,
 NASM assembly with the Browser recipe's include paths, and `git diff --check`
 all pass. The full `make browsertest`/guest run remains to be repeated when a
 Linux/QEMU test environment is available; this Windows session's WSL distro
-cannot start because virtualization support was unavailable.
+cannot start because virtualization support was unavailable. An attempted
+`python tools/os88test.py fast` also stops on Windows because the runner uses
+`os.wait4`, which Python's Windows runtime does not provide; this is an
+environment limitation, not a passing suite.
