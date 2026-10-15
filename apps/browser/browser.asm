@@ -4055,10 +4055,6 @@ br_parse:
     mov byte [br_any], 0
     mov byte [br_pre], 0
     mov byte [br_trunc], 0
-    mov byte [br_hn], 0
-    mov word [br_hnw], 0
-    mov byte [br_hid], 0
-    mov byte [br_faction], 0
     mov byte [br_fdepth], 0
     mov byte [br_frameattr], 0
     mov byte [br_fmode], 0
@@ -5669,6 +5665,8 @@ br_layout:
     jne .count
     cmp al, ' '
     jne .count
+    cmp byte [br_lpre], 0
+    jne .count                       ; literal PRE indentation is content
     mov [br_lstart], si             ; a leading space never starts a line
     jmp .loop
 .count:
@@ -7960,7 +7958,7 @@ br_hidden:
     pop ax
     ret
 
-; --- br_henc - percent-encode the source span SI..CX into br_hid -------------
+; --- br_henc - percent-encode the source span SI..CX into the current sink --
 br_henc:
     push ax
     push si
@@ -8829,6 +8827,7 @@ br_a_alt:     db 'alt', 0
 br_a_checked: db 'checked', 0
 br_s_post:    db 'post', 0
 br_s_posting: db 'POST request', 0
+br_s_postget: db 'History GET: POST body not replayed', 0
 br_s_password: db 'password', 0
 br_s_file:    db 'file', 0
 br_s_center:  db 'center', 0
@@ -8842,11 +8841,6 @@ br_s_radio:   db 'radio', 0
 br_s_option:  db 'option', 0
 br_s_selected: db 'selected', 0
 br_s_select:  db 'select', 0
-br_s_subbtn:  db '<', D_NBSP, 'Submit', D_NBSP, '>', 0   ; ONE WORD, so the
-                                    ; wrap moves the whole button to the next
-                                    ; line rather than splitting it. FrogFind's
-                                    ; is at the end of a line and came out as
-                                    ; `< Submit` with the `>` alone below
 br_s_scheme:  db 'http://', 0
 br_s_schemes: db 'https://', 0
 br_s_colon:   db ':', 0
@@ -8962,12 +8956,9 @@ br_onw      equ os88_image_end + 536  ; word: br_put's buffered count, so a
 br_fn       equ os88_image_end + 538  ; byte: text fields on the page
 br_fcur     equ os88_image_end + 539  ; byte: which has focus, 0FFh = none
 br_post     equ os88_image_end + 540  ; byte: one-shot form POST handoff to br_go
-br_hn       equ os88_image_end + 541  ; byte: any hidden pairs
+br_postwarn equ os88_image_end + 541  ; one-shot note: history replays POST as GET
 br_dest     equ os88_image_end + 542  ; byte: which sink br_encb appends to
-br_hnw      equ os88_image_end + 544  ; word: bytes of hidden pairs
 br_un       equ os88_image_end + 546  ; word: bytes of composed URL
-br_faction  equ os88_image_end + 620  ; BR_ACTMAX
-br_hid      equ os88_image_end + 684  ; BR_HIDMAX
 br_gen      equ os88_image_end + 940  ; byte: bumped by every br_go that drops
                                       ; a fetch in flight (brnet.inc's
                                       ; br_abort)
@@ -9177,7 +9168,7 @@ br_framecurrent equ br_parsing + 1
 br_lnkfrm equ br_framecurrent + 1
 br_lnkoff   equ br_lnkfrm + BR_LNKMAX
 br_lnkhit   equ br_lnkoff + BR_LNKMAX*2
-; Variable-size 1.2b form tables follow main's fixed ABI and the frame/link
+; Variable-size 1.4 form tables follow main's fixed ABI and the frame/link
 ; metadata. These stay in the loader-zeroed package BSS, not the image.
 br_formn      equ br_lnkhit + 2
 br_formcur    equ br_formn + 1
@@ -9238,5 +9229,5 @@ BR_BSS      equ (br_frameurl + BR_UBUF - os88_image_end)
 %error "br_free_all walks br_srcseg, br_docseg and br_lseg as a run"
 %endif
 %if br_url + BR_URLMAX != br_gen
-%error "the 1.2b URL buffer must end before main's fixed worker-generation slots"
+%error "the URL buffer must end before main's fixed worker-generation slots"
 %endif

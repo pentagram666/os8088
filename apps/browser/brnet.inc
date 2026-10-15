@@ -195,8 +195,20 @@ br_go:
     call br_abort
 .free:
     mov al, [br_post]
+    mov ah, [br_reqpost]            ; method of the page we are leaving
     mov [br_reqpost], al
     mov byte [br_post], 0
+    mov byte [br_postwarn], 0
+    or al, al                       ; a history GET cannot replay the old body
+    jnz .method
+    cmp byte [br_nopush], 0
+    je .method
+    cmp byte [br_nstate], BN_DONE
+    jne .method
+    or ah, ah
+    jz .method
+    mov byte [br_postwarn], 1
+.method:
     mov word [br_nmsg], 0
     call br_split                   ; the URL into host, port and path
     jc .badurl
@@ -233,6 +245,11 @@ br_go:
                                     ; last time's verdict goes: without this a
                                     ; `Saved` would survive into the next page
                                     ; and be shown again when it finished
+    cmp byte [br_postwarn], 0
+    je .warned
+    mov word [br_nmsg], br_s_postget ; history stores URLs, never a POST body
+.warned:
+    mov byte [br_postwarn], 0
     mov [br_nlen], ax
     mov [br_fin], al                ; ...the hand-over (SPEC.md 71.14)
     mov [br_code], ax
@@ -286,6 +303,7 @@ br_go:
 .nomem:
     mov si, br_s_nomem
 .say:
+    mov byte [br_postwarn], 0
     call br_errst                   ; the refusal, said
     call br_promise                 ; **THIS TAIL IS A THIRD SETTLE** (SPEC.md
                                     ; 71.11). A `https://` URL, an empty host

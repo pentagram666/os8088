@@ -113845,6 +113845,11 @@ form with two buttons (Search / I'm Feeling Lucky, Login / Register) tells the
 server which was pressed. Return in a focused text field submits the field's
 own form with no button pair.
 
+History records URLs rather than POST bodies. Reloading or navigating through
+history from a POST response therefore performs a GET; after such a history
+fetch, the state line says `History GET: POST body not replayed` rather than
+silently implying that the original form submission was repeated.
+
 Password and file controls remain visibly unsupported. With no TLS, the
 browser must not show a password control that could be submitted in plaintext.
 `<textarea>` remains outside the single-line control model and is shown as
